@@ -1,0 +1,32 @@
+# Virtual Environment
+venv/
+env/
+Lib/
+Scripts/
+Include/
+bin/
+lib/
+pyvenv.cfg
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+.env
+*.log
+uploads/
