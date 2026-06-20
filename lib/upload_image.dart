@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-const _predictUrl = 'https://5vrh9gtf-5000.asse.devtunnels.ms/predict';
+const _predictUrl = 'http://192.168.1.19:5000/predict';
 const _requestTimeout = Duration(seconds: 30);
 
 Future<Map<String, dynamic>> uploadImage(String imagePath) async {

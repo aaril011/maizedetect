@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'history_service.dart';
 import 'maize_theme.dart';
 import 'widgets/maize_app_bar.dart';
 import 'package:maizedetect/services/weather_service.dart';
@@ -17,6 +18,20 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  Map<String, dynamic>? weatherData;
+  bool isLoadingWeather = true;
+
+  int get totalRecords => HistoryService.instance.records.length;
+
+  int get healthyCount => HistoryService.instance.records
+      .where((record) => record.title.contains('Sehat') || record.title.contains('healthy'))
+      .length;
+
+  int get diseaseCount => totalRecords - healthyCount;
+
+  double get healthyPercent => totalRecords == 0 ? 0 : (healthyCount / totalRecords) * 100;
+  double get diseasePercent => totalRecords == 0 ? 0 : (diseaseCount / totalRecords) * 100;
+
   Widget _healthCard({
     required IconData icon,
     required String title,
@@ -115,13 +130,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Map<String, dynamic>? weatherData;
-  bool isLoadingWeather = true;
-
   @override
   void initState() {
     super.initState();
+    HistoryService.instance.addListener(_refreshStats);
     _loadWeather();
+  }
+
+  @override
+  void dispose() {
+    HistoryService.instance.removeListener(_refreshStats);
+    super.dispose();
+  }
+
+  void _refreshStats() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadWeather() async {
@@ -157,15 +182,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const MaizeAppBar(),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                clipBehavior: Clip.hardEdge, // ✅ PERBAIKAN: Tambahkan clipBehavior
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), // ✅ PERBAIKAN: Ubah bottom padding dari 40 menjadi 16
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _HeroSection(
                       textTheme: textTheme,
                       onTapScan: widget.onTapScan,
+                      weatherData: weatherData,
+                      isLoading: isLoadingWeather,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     Text(
                       'Ringkasan Kesehatan Lahan',
                       style: textTheme.titleLarge?.copyWith(
@@ -177,39 +205,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _healthCard(
                       icon: Icons.eco_outlined,
                       title: 'Kondisi Tanaman',
-                      value: '94%',
-                      subtitle: '+2% dari minggu lalu',
+                      value: '${healthyPercent.toStringAsFixed(0)}%',
+                      subtitle: '$healthyCount dari $totalRecords hasil identifikasi',
                       iconColor: Colors.green,
                     ),
                     const SizedBox(height: 16),
                     _healthCard(
                       icon: Icons.water_drop_outlined,
-                      title: 'Kelembaban Tanah',
-                      value: 'Cukup',
-                      subtitle: 'Kondisi stabil',
-                      iconColor: Colors.green,
+                      title: 'Kelembaban Udara',
+                      value: weatherData != null
+                          ? '${(weatherData!['weather']['current']?['relative_humidity_2m'] ?? 0)}%'
+                          : '--%',
+                      subtitle: weatherData != null
+                          ? 'Berdasarkan cuaca saat ini'
+                          : 'Sedang memuat data',
+                      iconColor: Colors.blue,
                     ),
                     const SizedBox(height: 16),
                     _healthCard(
                       icon: Icons.health_and_safety_outlined,
                       title: 'Risiko Penyakit',
-                      value: 'Rendah',
-                      subtitle: 'Pemeriksaan berikutnya: 3 hari',
+                      value: '${diseasePercent.toStringAsFixed(0)}%',
+                      subtitle: '$diseaseCount hasil dengan potensi masalah',
                       iconColor: Colors.red,
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Kondisi Lapangan',
-                      style: textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: MaizeColors.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _WeatherPanel(
-                      textTheme: textTheme,
-                      weatherData: weatherData,
-                      isLoading: isLoadingWeather,
                     ),
                   ],
                 ),
@@ -223,127 +241,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.textTheme, this.onTapScan});
-
-  final TextTheme textTheme;
-  final VoidCallback? onTapScan;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        height: 280,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _HeroBackground(),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    MaizeColors.primary,
-                    MaizeColors.primary.withValues(alpha: 0.85),
-                    MaizeColors.primary.withValues(alpha: 0.35),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    'Pembaruan Pagi',
-                    style: textTheme.labelLarge?.copyWith(
-                      color: MaizeColors.primaryFixed,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Kondisi lapangan terlihat stabil hari ini.',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: MaizeColors.onPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Kondisinya menguntungkan, tidak ada masalah mendesak yang teridentifikasi untuk lahan di bagian utama.',
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyLarge?.copyWith(
-                      color: MaizeColors.inverseOnSurface.withValues(
-                        alpha: 0.9,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: MaizeColors.tertiaryFixed,
-                        foregroundColor: MaizeColors.tertiaryContainer,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 16,
-                          horizontal: 20,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                      onPressed: onTapScan,
-                      icon: const Icon(Icons.center_focus_strong),
-                      label: const Text(
-                        'Pindai Sekarang',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroBackground extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Image.network(
-      _kHeroImageUrl,
-      fit: BoxFit.cover,
-      color: Colors.white.withValues(alpha: 0.5),
-      colorBlendMode: BlendMode.overlay,
-      errorBuilder: (context, error, stackTrace) =>
-          ColoredBox(color: MaizeColors.primaryContainer),
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return ColoredBox(color: MaizeColors.primaryContainer);
-      },
-    );
-  }
-}
-
-class _WeatherPanel extends StatelessWidget {
-  const _WeatherPanel({
+  const _HeroSection({
     required this.textTheme,
-    required this.weatherData,
-    required this.isLoading,
+    this.onTapScan,
+    this.weatherData,
+    this.isLoading = false,
   });
 
   final TextTheme textTheme;
+  final VoidCallback? onTapScan;
   final Map<String, dynamic>? weatherData;
   final bool isLoading;
 
@@ -375,123 +281,151 @@ class _WeatherPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
+    final current = weatherData?['weather']?['current'];
+    final temperature = current?['temperature_2m'];
+    final humidity = current?['relative_humidity_2m'];
+    final weatherCode = current?['weather_code'] ?? 0;
+    final description = getWeatherDescription(weatherCode);
 
-    if (weatherData == null) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Text('Gagal memuat data cuaca'),
-        ),
-      );
-    }
-
-    final current = weatherData!['weather']['current'];
-
-    final temperature = current['temperature_2m'];
-    final humidity = current['relative_humidity_2m'];
-    final windSpeed = current['wind_speed_10m'];
-    final weatherCode = current['weather_code'];
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: MaizeColors.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: MaizeColors.surfaceVariant),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        height: 250,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            _HeroBackground(),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    MaizeColors.primary,
+                    MaizeColors.primary.withValues(alpha: 0.88),
+                    MaizeColors.primary.withValues(alpha: 0.45),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kondisi Lapangan',
+                    style: textTheme.labelLarge?.copyWith(
+                      color: MaizeColors.primaryFixed,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    isLoading
+                        ? 'Memuat cuaca...'
+                        : '$description • ${temperature?.toStringAsFixed(0) ?? '--'}°C',
+                    style: textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: MaizeColors.onPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
                     children: [
-                      Text(
-                        'HARI INI',
-                        style: textTheme.labelLarge?.copyWith(
-                          color: MaizeColors.onSurfaceVariant,
-                          letterSpacing: 1.2,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      const Icon(
+                        Icons.water_drop_outlined,
+                        color: MaizeColors.onPrimary,
+                        size: 18,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(width: 6),
                       Text(
-                        '$temperature°C',
-                        style: textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: MaizeColors.onSurface,
-                        ),
-                      ),
-                      Text(
-                        getWeatherDescription(weatherCode),
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: MaizeColors.onSurfaceVariant,
+                        isLoading
+                            ? 'Sedang mengambil data cuaca'
+                            : 'Kelembapan $humidity%',
+                        style: textTheme.bodyLarge?.copyWith(
+                          color: MaizeColors.inverseOnSurface.withValues(
+                            alpha: 0.9,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                Icon(
-                  Icons.wb_cloudy_outlined,
-                  size: 48,
-                  color: MaizeColors.secondary,
-                ),
-              ],
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Lahan sedang dalam kondisi baik untuk pemeriksaan rutin.',
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: MaizeColors.onPrimary,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8), // ✅ Kurangi dari 12 menjadi 8
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: MaizeColors.tertiaryFixed,
+                        foregroundColor: MaizeColors.tertiaryContainer,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 6, // ✅ Kurangi dari 8 menjadi 6
+                          horizontal: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        minimumSize: const Size(0, 40), // ✅ Kurangi dari 46 menjadi 40
+                      ),
+                      onPressed: onTapScan,
+                      icon: const Icon(
+                        Icons.center_focus_strong,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Pindai',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          height: 1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Divider(height: 32, color: MaizeColors.outlineVariant),
-            _weatherRow(textTheme, 'Angin', '$windSpeed km/h'),
-            const SizedBox(height: 8),
-            _weatherRow(textTheme, 'Kelembaban', '$humidity%'),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _weatherRow(TextTheme textTheme, String k, String v) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            k,
-            overflow: TextOverflow.ellipsis,
-            style: textTheme.bodyMedium?.copyWith(
-              color: MaizeColors.onSurfaceVariant,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text(
-            v,
-            textAlign: TextAlign.right,
-            overflow: TextOverflow.ellipsis,
-            style: textTheme.labelLarge?.copyWith(
-              color: MaizeColors.onSurface,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
+class _HeroBackground extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Image.network(
+      _kHeroImageUrl,
+      fit: BoxFit.cover,
+      color: Colors.white.withValues(alpha: 0.5),
+      colorBlendMode: BlendMode.overlay,
+      errorBuilder: (context, error, stackTrace) =>
+          ColoredBox(color: MaizeColors.primaryContainer),
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return ColoredBox(color: MaizeColors.primaryContainer);
+      },
     );
   }
 }

@@ -16,180 +16,94 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  final _searchController = TextEditingController();
-  String _selectedFilter = 'Semua';
-  String _searchQuery = '';
+  final TextEditingController searchController = TextEditingController();
 
-  static const _filters = [
-    'Semua',
-    'Sehat',
-    'Karat Daun',
-    'Hawar Daun',
-    'Bulai',
-  ];
+  String selectedFilter = 'Semua';
+  String searchText = '';
+
+  final filters = ['Semua', 'Daun Sehat', 'Karat Daun', 'Hawar Daun', 'Bulai'];
 
   @override
   void initState() {
     super.initState();
-    HistoryService.instance.addListener(_onHistoryChanged);
-    _searchController.addListener(() {
-      setState(() => _searchQuery = _searchController.text.toLowerCase());
+    HistoryService.instance.addListener(refresh);
+
+    searchController.addListener(() {
+      setState(() {
+        searchText = searchController.text.toLowerCase();
+      });
     });
+  }
+
+  void refresh() {
+    setState(() {});
   }
 
   @override
   void dispose() {
-    HistoryService.instance.removeListener(_onHistoryChanged);
-    _searchController.dispose();
+    HistoryService.instance.removeListener(refresh);
+    searchController.dispose();
     super.dispose();
   }
 
-  void _onHistoryChanged() => setState(() {});
+  List<ScanRecord> get filteredData {
+    var data = HistoryService.instance.records;
 
-  List<ScanRecord> get _filtered {
-    var list = HistoryService.instance.records;
-
-    // Filter by status
-    if (_selectedFilter != 'Semua') {
-      list = list.where((r) => r.status == _selectedFilter).toList();
+    if (selectedFilter != 'Semua') {
+      data = data.where((item) => formatTitle(item.title) == selectedFilter).toList();
     }
 
-    // Filter by search query
-    if (_searchQuery.isNotEmpty) {
-      list = list
-          .where(
-            (r) =>
-                r.title.toLowerCase().contains(_searchQuery) ||
-                r.subtitle.toLowerCase().contains(_searchQuery) ||
-                r.status.toLowerCase().contains(_searchQuery),
-          )
-          .toList();
+    if (searchText.isNotEmpty) {
+      data = data.where((item) {
+        final title = formatTitle(item.title).toLowerCase();
+        return title.contains(searchText);
+      }).toList();
     }
 
-    return list;
+    return data;
   }
 
-  Future<void> _deleteRecord(ScanRecord record) async {
-    await HistoryService.instance.remove(record.id);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Record dihapus'),
-          action: SnackBarAction(
-            label: 'Batal',
-            onPressed: () async {
-              await HistoryService.instance.add(record);
-            },
-          ),
+  String formatTitle(String text) {
+    final lower = text.toLowerCase();
+
+    if (lower.contains('karat')) {
+      return 'Karat Daun';
+    }
+    if (lower.contains('hawar')) {
+      return 'Hawar Daun';
+    }
+    if (lower.contains('bulai')) {
+      return 'Bulai';
+    }
+    if (lower.contains('sehat') || lower.contains('healthy')) {
+      return 'Daun Sehat';
+    }
+    return 'Tidak diketahui';
+  }
+
+  Future<void> deleteAll() async {
+    await HistoryService.instance.clear();
+  }
+
+  void _openInsights(ScanRecord item) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InsightsScreen(
+          imagePath: item.imagePath,
+          readOnly: true,
+          result: {
+            'class': item.title,
+            'confidence': item.confidence,
+            'Penyebab': item.subtitle,
+            'Solusi': item.solution,
+          },
         ),
-      );
-    }
-  }
-
-  Future<void> _clearAll() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (ctx) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 40),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Hapus Semua History?',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                const Text(
-                  'Semua data riwayat hasil scan akan '
-                  'dihapus secara permanen.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.black54,
-                    height: 1.4,
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(ctx, false);
-                      },
-                      child: const Text(
-                        'Batal',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(width: 10),
-
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 22,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        elevation: 0,
-                      ),
-
-                      onPressed: () {
-                        Navigator.pop(ctx, true);
-                      },
-
-                      child: const Text(
-                        'Hapus Semua',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      ),
     );
-
-    if (confirm == true) {
-      await HistoryService.instance.clear();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final filtered = _filtered;
-
     return ColoredBox(
       color: MaizeColors.background,
       child: SafeArea(
@@ -197,337 +111,211 @@ class _HistoryScreenState extends State<HistoryScreen> {
         child: Column(
           children: [
             const MaizeAppBar(),
-            Expanded(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            const Text(
+                              'Riwayat Pindai',
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tinjau kembali hasil diagnostik lapangan sebelumnya.',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                          size: 28,
+                        ),
+                        onPressed: deleteAll,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: TextField(
+                      controller: searchController,
+                      decoration: const InputDecoration(
+                        hintText: 'Cari berdasarkan penyakit atau status...',
+                        prefixIcon: Icon(Icons.search),
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 36,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: filters.length,
+                      itemBuilder: (context, index) {
+                        final item = filters[index];
+                        final active = selectedFilter == item;
+
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              selectedFilter = item;
+                            });
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 18),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? const Color(0xffDDF5D8)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              item,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: active ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: filteredData.isEmpty
+                  ? const Center(child: Text('Belum ada data'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: filteredData.length,
+                      itemBuilder: (context, index) {
+                        final item = filteredData[index];
+
+                        return Dismissible(
+                          key: ValueKey(item.id),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade400,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.delete,
+                              color: Colors.white,
+                            ),
+                          ),
+                          onDismissed: (_) async {
+                            await HistoryService.instance.remove(item.id);
+                          },
+                          child: InkWell(
+                            onTap: () => _openInsights(item),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    'Riwayat Pindai',
-                                    style: textTheme.headlineSmall?.copyWith(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w700,
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.file(
+                                      File(item.imagePath),
+                                      width: 75,
+                                      height: 75,
+                                      fit: BoxFit.cover,
                                     ),
                                   ),
-                                  Text(
-                                    'Tinjau kembali hasil diagnostik lapangan sebelumnya.',
-                                    style: textTheme.bodyMedium?.copyWith(
-                                      color: MaizeColors.onSurfaceVariant,
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          formatTitle(item.title),
+                                          style: const TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          item.subtitle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            _StatusPill(
+                                              status: formatTitle(item.title),
+                                            ),
+                                            const Spacer(),
+                                            Text(
+                                              item.formattedTime,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => _openInsights(item),
+                                    icon: const Icon(Icons.chevron_right),
+                                    splashRadius: 20,
                                   ),
                                 ],
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline_rounded,
-                                size: 24,
-                              ),
-                              tooltip: 'Hapus semua history',
-                              color: Colors.red,
-                              onPressed: _clearAll,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _SearchAndFilterBar(
-                          controller: _searchController,
-                          selectedFilter: _selectedFilter,
-                          filters: _filters,
-                          onFilterSelected: (f) =>
-                              setState(() => _selectedFilter = f),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? _EmptyState(
-                            hasRecords: HistoryService.instance.records.isEmpty,
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final item = filtered[index];
-                              return Dismissible(
-                                key: ValueKey(item.id),
-                                direction: DismissDirection.endToStart,
-                                background: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 20),
-                                  decoration: BoxDecoration(
-                                    color: MaizeColors.error.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    Icons.delete_outline,
-                                    color: MaizeColors.error,
-                                  ),
-                                ),
-                                confirmDismiss: (_) async {
-                                  await _deleteRecord(item);
-                                  return false;
-                                },
-                                child: _HistoryCard(
-                                  item: item,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => InsightsScreen(
-                                        imagePath: item.imagePath.isEmpty
-                                            ? null
-                                            : item.imagePath,
-                                        readOnly: true,
-                                        result: {},
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
                           ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Search & Filter Bar ─────────────────────────────────────────────────────
-
-class _SearchAndFilterBar extends StatefulWidget {
-  const _SearchAndFilterBar({
-    required this.controller,
-    required this.selectedFilter,
-    required this.filters,
-    required this.onFilterSelected,
-  });
-
-  final TextEditingController controller;
-  final String selectedFilter;
-  final List<String> filters;
-  final ValueChanged<String> onFilterSelected;
-
-  @override
-  State<_SearchAndFilterBar> createState() => _SearchAndFilterBarState();
-}
-
-class _SearchAndFilterBarState extends State<_SearchAndFilterBar> {
-  @override
-  void initState() {
-    super.initState();
-
-    widget.controller.addListener(() {
-      setState(() {});
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          height: 46,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: MaizeColors.outlineVariant.withValues(alpha: 0.5),
-            ),
-          ),
-          child: TextField(
-            controller: widget.controller,
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Cari penyakit atau status...',
-              hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                size: 21,
-                color: MaizeColors.primary,
-              ),
-              suffixIcon: widget.controller.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 19),
-                      onPressed: () {
-                        widget.controller.clear();
+                        );
                       },
-                    )
-                  : null,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 13),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 34,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: widget.filters.length,
-            itemBuilder: (context, index) {
-              final filter = widget.filters[index];
-              final active = filter == widget.selectedFilter;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: () {
-                    widget.onFilterSelected(filter);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(horizontal: 13),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: active ? const Color(0xFFDFF4D8) : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: active
-                            ? Colors.transparent
-                            : MaizeColors.outlineVariant.withValues(alpha: 0.5),
-                      ),
                     ),
-                    child: Text(
-                      filter,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: active
-                            ? const Color(0xFF2E7D32)
-                            : Colors.grey.shade600,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── History Card ─────────────────────────────────────────────────────────────
-
-class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({required this.item, required this.onTap});
-
-  final ScanRecord item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: MaizeColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: MaizeColors.outlineVariant.withValues(alpha: 0.4),
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x1403271A),
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: _thumbnail(item.imagePath),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: MaizeColors.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    item.subtitle,
-                    style: textTheme.bodySmall?.copyWith(
-                      color: MaizeColors.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _StatusPill(status: item.status),
-                      const Spacer(),
-                      Text(
-                        item.formattedTime,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: MaizeColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.chevron_right,
-              color: MaizeColors.onSurfaceVariant,
-              size: 20,
             ),
           ],
         ),
       ),
     );
   }
-
-  Widget _thumbnail(String path) {
-    if (path.isNotEmpty && File(path).existsSync()) {
-      return Image.file(File(path), width: 92, height: 92, fit: BoxFit.cover);
-    }
-    return Container(
-      width: 92,
-      height: 92,
-      color: MaizeColors.surfaceContainer,
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.grass,
-        color: MaizeColors.primary.withValues(alpha: 0.4),
-        size: 36,
-      ),
-    );
-  }
 }
-
-// ─── Status Pill ──────────────────────────────────────────────────────────────
 
 class _StatusPill extends StatelessWidget {
   const _StatusPill({required this.status});
@@ -537,93 +325,42 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color bg;
-    Color fg;
+    Color text;
+
     switch (status) {
-      case 'Sehat':
-        bg = const Color(0xFFC8F2C2);
-        fg = const Color(0xFF1B5E20);
+      case 'Daun Sehat':
+        bg = const Color(0xffC8F2C2);
+        text = const Color(0xff2E7D32);
         break;
-
       case 'Karat Daun':
-        bg = const Color(0xFFFFCDD2);
-        fg = const Color(0xFFC62828);
+        bg = const Color(0xffffcccc);
+        text = const Color(0xffC62828);
         break;
-
       case 'Hawar Daun':
-        bg = const Color(0xFFFFEB99);
-        fg = const Color(0xFF8D6E00);
+        bg = const Color(0xffffed99);
+        text = const Color(0xff8D6E00);
         break;
-
       case 'Bulai':
-        bg = const Color(0xFFD6E4FF);
-        fg = const Color(0xFF1E40AF);
+        bg = const Color(0xffD6E4FF);
+        text = const Color(0xff1565C0);
         break;
-
       default:
         bg = Colors.grey.shade200;
-        fg = Colors.black87;
+        text = Colors.grey.shade700;
     }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         status,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: fg,
+        style: TextStyle(
+          fontSize: 12,
           fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.hasRecords});
-
-  /// true jika memang belum ada record sama sekali (bukan karena filter)
-  final bool hasRecords;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasRecords ? Icons.history : Icons.search_off_rounded,
-              size: 72,
-              color: MaizeColors.primary.withValues(alpha: 0.25),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              hasRecords
-                  ? 'Belum ada history scan'
-                  : 'Tidak ada hasil yang cocok',
-              style: textTheme.titleMedium?.copyWith(
-                color: MaizeColors.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              hasRecords
-                  ? 'Setelah scan daun jagung, simpan hasilnya dan akan muncul di sini.'
-                  : 'Coba ubah kata kunci atau filter yang dipilih.',
-              style: textTheme.bodySmall?.copyWith(
-                color: MaizeColors.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+          color: text,
         ),
       ),
     );
